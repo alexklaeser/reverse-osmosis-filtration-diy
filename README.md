@@ -2,7 +2,7 @@
 
 ## Program Summary
 
-This script is designed for a Raspberry Pi Pico running MicroPython 
+This script is designed for a Raspberry Pi Pico running [MicroPython](https://micropython.org/). 
 (yet should be compatible with other platforms running MicroPython), 
 with the goal of controlling a set of 4 valves for a reverse osmosis filtration system. 
 The system is controlled with one button and offers the following main features:
