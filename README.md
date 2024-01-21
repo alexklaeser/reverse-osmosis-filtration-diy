@@ -20,6 +20,13 @@ My final system looked like shown in the following two images:
 ![DIY reverse osmosis system with automatization features](images/IMG_20230625_210325_268.jpg)
 
 
+## Schema
+
+Here is the overview of how the valves are employed in the filtration process.
+
+![Schema of the DIY reverse osmosis system with automatization features](images/schema.png)
+
+
 ## Hardware parts
 
 For the full system, I used the following hardware parts:
