@@ -48,6 +48,7 @@ def debug(message):
     timestamp = time.localtime()
     time_str = "{:04}-{:02}-{:02} {:02}:{:02}:{:02}".format(
         timestamp[0], timestamp[1], timestamp[2], timestamp[3], timestamp[4], timestamp[5])
+    return ### REMOVE FOR DEBUG
     
     # Open the log file in append mode and write the message
     with open(LOG_FILE, 'a') as log_file:
@@ -171,12 +172,13 @@ async def flush_filter():
         debug('  discard filtered water')
         set_valves_to_disposal()
         await uasyncio.sleep(CONFIG['disposal_sec'])
+    except Exception as e:
+        debug(f'  Error during flushing: {e}')
     finally:
         last_flush_end = time.time()
         debug('  RESET VALVES!')
-        debug()
         close_valves()
-        await short_beep()
+    await short_beep()
     
 
 async def filter_water(duration_sec=None):
@@ -189,7 +191,12 @@ async def filter_water(duration_sec=None):
     # check whether we need to flush the membrane
     flush_needed = time.time() - max(last_flush_end, last_filtering_end) > CONFIG['water_clean_sec']
     if flush_needed:
-        await flush_filter()
+        try:
+            await flush_filter()
+            debug('### back in -> filter_water()')
+        except Exception as e:
+            debug('### back in -> filter_water()')
+            debug(f'  Error during flushing: {e}')
     
     # do the filtering
     try:
@@ -239,11 +246,11 @@ async def handle_button():
         # decide upon the action
         if not running_task.done():
             debug('  Cancel task {}'.format(running_task_type))
-            #running_task.cancel()
-            try:
-                await uasyncio.wait_for_ms(running_task, 100)
-            except uasyncio.TimeoutError:
-                pass
+            running_task.cancel()
+            #try:
+            #    await uasyncio.wait_for_ms(running_task, 100)
+            #except uasyncio.TimeoutError:
+            #    pass
             if long_pressed and running_task_type == 'FILTERING':
                 # save the new time interval for filtering
                 CONFIG['filter_sec'] = last_filtering_end - last_filtering_start
