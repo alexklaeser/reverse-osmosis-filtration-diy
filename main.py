@@ -48,6 +48,7 @@ def debug(message):
     timestamp = time.localtime()
     time_str = "{:04}-{:02}-{:02} {:02}:{:02}:{:02}".format(
         timestamp[0], timestamp[1], timestamp[2], timestamp[3], timestamp[4], timestamp[5])
+    #print(f"{time_str} - {message}\n")
     return ### REMOVE FOR DEBUG
     
     # Open the log file in append mode and write the message
@@ -247,10 +248,10 @@ async def handle_button():
         if not running_task.done():
             debug('  Cancel task {}'.format(running_task_type))
             running_task.cancel()
-            #try:
-            #    await uasyncio.wait_for_ms(running_task, 100)
-            #except uasyncio.TimeoutError:
-            #    pass
+            try:
+                await running_task
+            except uasyncio.CancelledError:
+                debug('  Task cancellation confirmed')
             if long_pressed and running_task_type == 'FILTERING':
                 # save the new time interval for filtering
                 CONFIG['filter_sec'] = last_filtering_end - last_filtering_start
@@ -302,5 +303,4 @@ event_loop.run_until_complete(greeting_beeps())
 event_loop.create_task(handle_button())
 event_loop.create_task(auto_flush())
 event_loop.run_forever()
-
 
