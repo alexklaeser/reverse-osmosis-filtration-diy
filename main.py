@@ -1,42 +1,51 @@
 """
-Task Manager and Control System for Reverse Osmosis Filtering
+Program Summary:
 
-This module manages an asynchronous task queue for controlling a water filtration
-system. It provides mechanisms for scheduling tasks, handling button inputs,
-and executing automatic flushing based on predefined timing configurations.
+This script is designed for a Raspberry Pi Pico runing MicroPython with the
+goal of controlling a set of 4 valves for a reverse osmosis filtration system.
+The system is controlled with one button. Its main features are:
+- Automatic flushing of the osmosis membrane every few hours to avoid the
+  development of germs in the different filters.
+- Automatic disposal of the first filtered water that (that contains more
+  particles due to the lowered pressure in the osmosis membrane during its
+  idle time).
+- Setting a fixed time interval for walter filtration to yield a specific
+  amount of water. This time interval can be stored via a long button press.
 
-Key Features:
-- Manages sequential execution of tasks
-- Supports task cancellation and automatic task continuation
-- Stores execution history for analysis
-- Provides debugging logs for monitoring and troubleshooting
+The script is structured to be asynchronous, allowing it to handle multiple
+operations efficiently without blocking the main execution flow.
 """
 
+# Importing necessary libraries for hardware control and asynchronous operations
 from machine import Pin
 import time
 import uasyncio
 import ujson
 import os
 
-# Configuration constants
-CONFIG_FILE = 'config.json'
+# Configuration values with default settings.
+# These settings are used for various timing operations in the script and can be overridden by an external configuration file.
+CONFIG_FILE = 'config.json'  # Name of the external configuration file.
 CONFIG = {
-    'flush_sec': 10,
-    'disposal_sec': 60,
-    'filter_sec': 120,
-    'auto_flush_sec': 8 * 60 * 60,
-    'water_clean_sec': 5 * 60,
+    'flush_sec': 10,          # Time in seconds for the flush operation.
+    'disposal_sec': 60,       # Time in seconds for the disposal operation.
+    'filter_sec': 120,        # Time in seconds for the filter operation.
+    'auto_flush_sec': 8 * 60 * 60,  # Time in seconds for automatic flushing (here, 8 hours).
+    'water_clean_sec': 5 * 60,      # Time in seconds for water cleaning operation.
 }
 
 MIN_FILTER_DURATION = 30  # Minimum duration for filtering
 
-# Hardware pin configuration
-PIN_BUZZER = Pin(15, Pin.OUT)
-PIN_BUTTON = Pin(16, Pin.IN, Pin.PULL_UP)
-PIN_VALVE1 = Pin(0, Pin.OUT)
-PIN_VALVE2 = Pin(1, Pin.OUT)
-PIN_VALVE3 = Pin(2, Pin.OUT)
-PIN_VALVE4 = Pin(3, Pin.OUT)
+# GPIO pin setup for various components connected to the microcontroller.
+PIN_BUZZER = Pin(15, Pin.OUT)  # Buzzer pin, set as output.
+PIN_BUTTON = Pin(16, Pin.IN, Pin.PULL_UP)  # Button pin, set as input with pull-up resistor.
+
+
+# Pins for controlling valves or other actuators.
+PIN_VALVE1 = Pin(0, Pin.OUT)  # Valve 1 control pin.
+PIN_VALVE2 = Pin(1, Pin.OUT)  # Valve 2 control pin.
+PIN_VALVE3 = Pin(2, Pin.OUT)  # Valve 3 control pin.
+PIN_VALVE4 = Pin(3, Pin.OUT)  # Valve 4 control pin.
 
 class DummyTask():
     """
@@ -92,9 +101,22 @@ def trim_log_file():
 
 def read_config():
     """
-    Reads the configuration from a JSON file.
+    Reads configuration settings from an external JSON file.
+
+    This function attempts to open and read a JSON file specified by the global variable CONFIG_FILE.
+    If successful, it parses the JSON content into a Python dictionary and returns it. This allows
+    the program to use externally defined configurations, providing flexibility and ease of adjustments
+    without modifying the code.
     Returns:
-        dict: Configuration dictionary if the file exists, otherwise an empty dictionary.
+        dict: A dictionary containing configuration settings. If the file reading fails (e.g., file not found),
+        the function returns an empty dictionary as a fallback, ensuring the program continues to run with
+        default settings.
+
+    Exception Handling:
+        OSError: This exception is caught to handle cases where the file might not exist or be accessible.
+        Instead of crashing the program, the function silently passes the exception and returns an empty
+        dictionary. This design choice prioritizes the program's continuous operation, but it may be worth
+        logging such errors for debugging and maintenance purposes.
     """
     try:
         with open(CONFIG_FILE, 'r') as f:
@@ -105,10 +127,15 @@ def read_config():
 
 def write_config(config):
     """
-    Writes the updated configuration to the JSON file.
+    Writes the provided configuration settings to an external JSON file.
+
+    This function takes a dictionary of configuration settings, converts it into a JSON string,
+    and writes it to the file specified by the CONFIG_FILE global variable. This allows for
+    persisting updated configurations externally, making them available for subsequent runs
+    of the program or other related systems.
 
     Args:
-        config (dict): The configuration dictionary to save.
+        config (dict): A dictionary containing configuration settings to be written.
     """
     with open(CONFIG_FILE, 'w') as f:
         f.write(ujson.dumps(config))
@@ -208,13 +235,16 @@ class TaskManager:
 
 def _set_valves(v1, v2, v3, v4):
     """
-    Controls the state of four valves based on the given boolean parameters.
-    The valves are inverted before being set (i.e., True means closed, False means open).
+    Internal convenient function that ontrols the state of the 4 valves based on the arguments.
 
-    :param v1: State of Valve 1 (Fale = closed, True = open)
-    :param v2: State of Valve 2 (Fale = closed, True = open)
-    :param v3: State of Valve 3 (Fale = closed, True = open)
-    :param v4: State of Valve 4 (Fale = closed, True = open)
+    Each parameter (v1, v2, v3, v4) corresponds to a specific valve and determines its state.
+    The function uses the 'value' method of each PIN_VALVE object to set the state. Notably,
+    the actual state is set to the logical NOT of the input parameters. This implies that a
+    True value in any argument will turn OFF the corresponding valve, and a False will turn it ON.
+
+    Args:
+        v1, v2, v3, v4 (bool): Boolean values indicating the desired state of valves 1, 2, 3, and 4,
+                               respectively. True to turn OFF the valve, False to turn it ON.
     """
     PIN_VALVE1.value(not v1)
     PIN_VALVE2.value(not v2)
@@ -223,27 +253,52 @@ def _set_valves(v1, v2, v3, v4):
 
 
 def close_valves():
-    """Closes all valves by setting them to False."""
+    """
+    Closes all valves.
+
+    This function calls the _set_valves function with all arguments set to False,
+    effectively turning all the valves ON (closed state) as per the _set_valves logic.
+    """
     _set_valves(False, False, False, False)
 
 
 def set_valves_to_flush():
-    """Sets the valves to flush mode, allowing water to flow through the membrane for cleaning."""
+    """
+    Configures valves for the flushing operation.
+
+    This function sets the first two valves to an OFF (open) state and the last two valves
+    to an ON (closed) state, tailored for the flushing process.
+    """
     _set_valves(True, True, False, False)
 
 
 def set_valves_to_disposal():
-    """Sets the valves to dispose of wastewater after filtration."""
+    """
+    Sets valves configuration for the disposal operation.
+
+    Adjusts the valve states specifically for disposing the filtered water. Here, valves 1
+    and 3 are set to OFF (open), while valves 2 and 4 are ON (closed).
+    """
     _set_valves(True, False, True, False)
 
 
 def set_valves_to_filter():
-    """Sets the valves to filtering mode, directing water through the filter for purification."""
+    """
+    Configures the valves for the filtering process.
+
+    For the filtering operation, this function opens valves 1 and 4 (setting them to OFF),
+    while closing valves 2 and 3 (setting them to ON).
+    """
     _set_valves(True, False, False, True)
 
 
 def init():
-    """Initializes the system by closing valves and loading configuration settings."""
+    """
+    Initializes the system by setting valves to a closed state and loading configuration settings.
+
+    The function outputs messages to indicate the progress of these actions, aiding in debugging and
+    monitoring the initialization process.
+    """
     debug('Set valves to be closed')
     close_valves()
     CONFIG.update(read_config())
@@ -251,7 +306,9 @@ def init():
 
 
 async def greeting_beeps():
-    """Plays a startup beep sequence to indicate system initialization."""
+    """
+    Plays a sequence of 1x short beep and 1x long beep as a greeting.
+    """
     PIN_BUZZER.value(1)
     await uasyncio.sleep(0.1)
     PIN_BUZZER.value(0)
@@ -262,7 +319,9 @@ async def greeting_beeps():
 
 
 async def finish_beeps():
-    """Plays a sequence of beeps to signal the completion of a process."""
+    """
+    Plays a sequence of 3x long beeps to indicate completion.
+    """
     PIN_BUZZER.value(1)
     await uasyncio.sleep(0.4)
     PIN_BUZZER.value(0)
@@ -277,14 +336,18 @@ async def finish_beeps():
 
 
 async def short_beep():
-    """Plays a short beep sound."""
+    """
+    Emits a short beep after a short button press.
+    """
     PIN_BUZZER.value(1)
     await uasyncio.sleep(0.2)
     PIN_BUZZER.value(0)
 
 
 async def long_beep():
-    """Plays a long beep sound."""
+    """
+    Emits a long beep after a long button press.
+    """
     PIN_BUZZER.value(1)
     await uasyncio.sleep(0.5)
     PIN_BUZZER.value(0)
@@ -292,7 +355,11 @@ async def long_beep():
 
 async def flush_filter():
     """
-    Performs a filter flush by running the flush sequence, followed by disposing of the first filtered water.
+    Asynchronous function to perform a flushing operation of the filtration system.
+
+    This function manages the process of flushing the osmosis membrane and discarding the first part of the filtered water.
+    It controls the valves' states to facilitate these operations and uses asynchronous sleeping to
+    maintain them for configured durations. The operation timestamps and task types are updated accordingly.
     """
     try:
         debug('flush osmose membrane', 'flush_filter')
@@ -309,8 +376,17 @@ async def flush_filter():
 
 async def filter_water(duration_sec=None):
     """
-    Runs the water filtration process for a specified duration or the default configuration time.
+    Asynchronous function to perform water filtering.
+
+    Initiates the water filtering process with a specified duration. If the duration is not provided,
+    it defaults to a value from the configuration. The function also checks if a membrane flush is needed
+    before starting the filtering. It updates global tracking variables and handles the valve states for filtering.
+
+    Args:
+        duration_sec (int, optional): The duration for which the water should be filtered. Defaults to None,
+                                      in which case it uses the 'filter_sec' value from CONFIG.
     """
+    # Determine the filtering duration based on the provided argument or default configuration.
     if duration_sec is None:
         duration_sec = CONFIG['filter_sec']
 
@@ -326,19 +402,25 @@ async def filter_water(duration_sec=None):
 
 
 def is_button_pressed():
-    """Checks if the system's control button is currently pressed."""
+    """
+    Check if the button is pressed.
+
+    Returns:
+        bool: True if the button is pressed (LOW state), False otherwise.
+    """
     return PIN_BUTTON.value() == 0
 
 
 async def handle_button():
     """
-    Handles button presses to trigger filtration or flushing events, based on the press duration.
+    First main loop to andle button presses to trigger filtration or flushing events, based on the press duration.
     """
     while True:
+        # wait for the button to be pressed
         while not is_button_pressed():
             await uasyncio.sleep_ms(20)
 
-        # button pressed
+        # wait for the button to be released
         ms_start = time.ticks_ms()
         while is_button_pressed():
             await uasyncio.sleep_ms(20)
@@ -401,7 +483,7 @@ async def handle_button():
 
 async def auto_flush():
     """
-    Periodically checks if auto-flushing is required based on the elapsed time since the last completed task.
+    Second main loop to periodically check if auto-flushing is required based on the elapsed time since the last completed task.
     """
     while True:
         await uasyncio.sleep(1)
