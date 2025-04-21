@@ -20,6 +20,15 @@ My final system looked like shown in the following two images:
 ![DIY reverse osmosis system with automatization features](images/IMG_20230625_210325_268.jpg)
 
 
+## Layout
+
+Here is the layout of all electrical components and their wiring.
+Note that the jumper has been removed from the relay effectively separating the coils from the Pico control circuit
+and preventing any loop backs that would disturb the Pico itself.
+
+![Layout of reverse osmosis system with automatization features](images/layout.png)
+
+
 ## Schema
 
 Here is the overview of how the valves are employed in the filtration process.
