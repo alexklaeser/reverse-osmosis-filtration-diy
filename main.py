@@ -34,7 +34,7 @@ CONFIG = {
     'water_clean_sec': 5 * 60,      # Time in seconds for water cleaning operation.
 }
 
-MIN_FILTER_DURATION = 30  # Minimum duration for filtering
+MIN_FILTER_DURATION = 15  # Minimum duration for filtering
 
 # GPIO pin setup for various components connected to the microcontroller.
 PIN_BUZZER = Pin(15, Pin.OUT)  # Buzzer pin, set as output.
@@ -444,7 +444,7 @@ async def handle_button():
         # handle scheduling of filtration and flushing tasks based on button press duration
         if task_manager.current_task:
             elapsed_time = time.time() - task_manager.current_task_start
-            if task_manager.current_task_type == "FILTERING" and long_pressed and elapsed_time > MIN_FILTER_DURATION:
+            if task_manager.current_task_type == "FILTER" and long_pressed and elapsed_time > MIN_FILTER_DURATION:
                 # save the new time interval for filtering
                 CONFIG['filter_sec'] = max(MIN_FILTER_DURATION, elapsed_time)
                 write_config(CONFIG)
